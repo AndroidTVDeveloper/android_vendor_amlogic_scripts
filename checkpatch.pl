@@ -13,6 +13,7 @@ chomp $name;
 use POSIX;
 my $time=strftime("%Y%m%d_%H%M%S",localtime());
 $ddir = "/tmp/".$name;
+$output = `mkdir $ddir`;
 $dpath = "$ddir"."/".$time.".diff";
 print "dpath:", $dpath, "\n";
 
