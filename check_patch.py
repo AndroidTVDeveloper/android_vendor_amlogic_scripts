@@ -102,8 +102,6 @@ class ChangedFile:
     def add_file_comments(self):
         if self.mode == 755 and self.should_not_be_executable():
             self.append_comment(0, "{} file should not be executable".format(self.file_ext))
-        if self.formattable_carriage_returns and self.should_not_have_carriage_return():
-            self.append_comment(0, "{} file should not have carriage returns (DOS line endings)".format(self.file_ext))
 
     def append_comment(self, line, msg):
         if line in self.comments:
@@ -198,98 +196,6 @@ def check_fp(fp):
                 f.mode = 755
         elif line.startswith("new mode 100755"):
             f.mode = 755
-        elif f and not f.filename and line.startswith("+++ b/"):
-            # get filename if previously failed for some reason
-            f.filename = line[len("+++ b/"):].rstrip('\r\n ')
-            f.on_update_filename()
-            check_lines = f.should_check_line_diff()
-            check_statement_spacing = f.should_check_statement_spacing()
-            check_indent = f.should_check_indent()
-        else:
-            if not check_lines:
-                continue
-            if line.startswith("@@ "):
-                # keep track of line numbers
-                # @@ -584,7 +681,7 @@
-                m = re.match(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)?\ @@", line)
-                try:
-                    section_line_start = int(m.group(1))
-                except ValueError:
-                    logging.error("failed to parse section line start")
-                    section_line_start_err = True
-                in_line_diff = True
-                cur_line = section_line_start - 1  # next line is the start
-                continue
-            if in_line_diff:
-                # keep track of line numbers
-                if line[0] in ' +':
-                    cur_line += 1
-                # get last context line's indent
-                if line[0] == " ":
-                    if line.startswith("    ", 1):
-                        context_indent = INDENT_SPACES
-                    elif line.startswith("\t", 1):
-                        context_indent = INDENT_TABS
-            if line[0] == '+' and line[1] != '+':
-                if check_lines and not section_line_start_err:
-                    if (f.is_new and
-                            not f.formattable_carriage_returns and
-                                line[-2] == '\r'):
-                        f.formattable_carriage_returns = True
-
-                    if trailing_sp_msg_count < MAX_TRAILING_SPACES_MSGS_PER_FILE:
-                        if (line.endswith(" \n") or
-                                line.endswith(" \r\n") or
-                                line.endswith("\t\n") or
-                                line.endswith("\t\r\n")):
-                            f.append_comment(cur_line, "trailing spaces")
-                            trailing_sp_msg_count += 1
-                            error_num += 1
-
-                    if mixed_tabs_msg_count < MAX_MIXED_TABS_MSGS_PER_FILE:
-                        if re.match(r" +\t", line[1:]) or re.match(r"\t+ +\t", line[1:]):
-                            # tab space can be correct, but not space tab and tab space tab
-                            f.append_comment(cur_line, "possibly incorrect mixed spaces then tabs indentation")
-                            mixed_tabs_msg_count += 1
-                            error_num += 1
-
-                    if check_statement_spacing and spacing_msg_count < MAX_SPACING_MSGS_PER_FILE:
-                        m = re.match(r"\s*(if|while|for|switch)", line[1:])
-                        if (m):
-                            # line starts with if|while|for|switch
-                            keyword = m.group(1)
-                            # check parenthesis/brace spacing. if( -> if (    or    ){ -> ) {
-                            m = re.match(r"\s*(?:if|while|for|switch)( ?)\(.*\)( ?)(\{?)", line[1:])
-                            if (m):
-                                keyword_sp, brace_space, brace = m.groups()
-                                if keyword_sp != ' ' or (
-                                                brace == '{' and brace_space != ' '):
-                                    f.append_comment(cur_line,
-                                                     "%s (...) %s  // spacing around parenthesis" % (keyword, brace))
-                                    spacing_msg_count += 1
-                                    error_num += 1
-
-                            # check binary operator spacing on if|while line
-                            # cpplint.py: match = Search(r'[^<>=!\s](==|!=|<=|>=|\|\|)[^<>=!\s,;\)]', line
-                            if keyword in ['if', 'while']:
-                                m = re.search(r"[^<>=!\s](==|!=|<=|>=|\|\||&&)[^<>=!\s,;\)]", line[1:])
-                                if (m):
-                                    f.append_comment(cur_line, "spacing around %s" % m.group(1))
-                                    spacing_msg_count += 1
-                                    error_num += 1
-                            continue
-                        # do{ -> do {
-                        elif re.match(r"\s*do\{", line[1:]):
-                            f.append_comment(cur_line, 'do {')
-                            spacing_msg_count += 1
-                            error_num += 1
-
-                    if check_indent and indent_msg_count < MAX_INDENT_MSGS_PER_FILE:
-                        if ((context_indent == INDENT_SPACES and line.startswith("\t", 1)) or
-                                (context_indent == INDENT_TABS and line.startswith("    ", 1))):
-                            f.append_comment(cur_line, "make sure indent style matches rest of file")
-                            indent_msg_count += 1
-                            error_num += 1
 
     if f and f.has_errors():
         f.add_file_comments()
@@ -306,9 +212,6 @@ def check_fp(fp):
     json_ret = file_comments_to_review(file_sections)
     if json_ret:
         print json_ret
-        #return 0
-    else:
-        return 1
 
     #print error_num
     if error_num > 0:
